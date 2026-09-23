@@ -1,0 +1,248 @@
+.TH OSFP\-BASELINE 1 2026-09-23 osfp "User Commands"
+.SH NAME
+osfp\-baseline \- record a fingerprint of the filesystem
+.SH SYNOPSIS
+.B osfp baseline
+.RB [ \-o
+.IR FILE ]
+.RB [ \-\-exclude
+.IR PATH ]...\&
+.RB [ \-\-exclude\-from
+.IR FILE ]
+.RB [ \-\-no\-default\-excludes ]
+.RB [ \-\-root
+.IR DIR ]
+.RB [ \-\-mounts
+.IR POLICY ]
+.RB [ \-\-max\-depth
+.IR N ]
+.RB [ \-\-max\-file\-size
+.IR N ]
+.RB [ \-\-jobs
+.IR N ]
+.RB [ \-\-os\-id
+.IR KEY ]
+.RB [ \-\-force ]
+.RB [ \-\-allow\-non\-root ]
+.RB [ \-v ]
+.SH DESCRIPTION
+.B osfp baseline
+walks the filesystem from the root, records the path, type, mode, owner,
+group, size and modification time of every entry, hashes every regular file
+with SHA\-256, reads the target of every symbolic link, and writes the result
+to a fingerprint file.
+It must run as root.
+.PP
+The fingerprint also records everything a later
+.BR osfp\-compare (1)
+needs to scan the same perimeter: the root, the exclusions, the mount policy
+and the depth limit.
+The command line of
+.B compare
+cannot change them.
+.PP
+The file is written under a temporary name and renamed once it is complete
+and synced, so a file under the final name is always whole.
+It is created with mode 0600: it lists every path on the system.
+.PP
+When it is done,
+.B baseline
+prints a summary: the key, the scope, the entries by type, what was hashed,
+what was skipped, and every mount point it did not cross, with its
+filesystem type.
+.SH OPTIONS
+.TP
+.BI \-o " FILE"
+Write the fingerprint to
+.IR FILE .
+The default is
+.IB key .osfp
+in the current directory, where
+.I key
+is the fingerprint key of the running system; see
+.BR osfp (1).
+.TP
+.B \-\-force
+Overwrite
+.I FILE
+if it exists.
+.TP
+.BI \-\-exclude " PATH"
+Leave
+.I PATH
+out of the fingerprint.
+Repeatable.
+See
+.B EXCLUSIONS
+for the pattern syntax.
+.TP
+.BI \-\-exclude\-from " FILE"
+Read exclusion patterns from
+.IR FILE ,
+one per line.
+Blank lines and lines starting with
+.B #
+are ignored.
+.TP
+.B \-\-no\-default\-excludes
+Start from an empty exclusion list instead of the built\-in one.
+.TP
+.BI \-\-root " DIR"
+Scan
+.I DIR
+instead of the whole filesystem.
+An exclusion that would cover
+.I DIR
+itself is dropped, and a note on standard error says which.
+.TP
+.BI \-\-mounts " POLICY"
+What to do at a mount point; see
+.BR "MOUNT POINTS" .
+.I POLICY
+is
+.B local
+(the default),
+.B same
+or
+.BR all .
+.TP
+.BI \-\-max\-depth " N"
+Do not descend more than
+.I N
+levels below the root.
+The default is 64, a guard against recursive bind mounts.
+.TP
+.BI \-\-max\-file\-size " N"
+Do not hash files larger than
+.I N
+bytes; record their size and modification time instead.
+.BR osfp\-compare (1)
+then falls back to those two for these files alone, and reports a difference
+as a change of metadata, never of content.
+.TP
+.BI \-\-jobs " N"
+Hash with
+.I N
+workers.
+The default is the number of CPUs, at most 8.
+.TP
+.BI \-\-os\-id " KEY"
+Use
+.I KEY
+as the fingerprint key instead of the detected one, for a system
+.B osfp
+does not recognise.
+.TP
+.B \-\-allow\-non\-root
+Scan without root privileges.
+The fingerprint is marked UNPRIVILEGED, and can only be compared by a scan
+that is unprivileged too.
+Meant for tests.
+.TP
+.BR \-v ", " \-\-verbose
+Report progress on standard error, at most once a second: entries seen, bytes
+hashed, time elapsed.
+On a terminal the line is redrawn in place and erased at the end; redirected,
+each update is a line of its own.
+.SH EXCLUSIONS
+An exclusion leaves a path out of the fingerprint entirely.
+A pattern is one of:
+.TP
+.I /absolute/path
+the path and everything below it;
+.TP
+.I /absolute/*/glob
+a glob matched against the whole path;
+.TP
+.I name
+or
+.I *.glob
+a glob matched against the base name, at any depth.
+.PP
+The built\-in list, recorded in the fingerprint with the rest, is
+.BR /proc ,
+.BR /sys ,
+.BR /dev ,
+.BR /tmp ,
+.BR /var/tmp ,
+.BR /run ,
+.BR /var/run ,
+.BR /media ,
+.B /mnt
+and
+.BR /lost+found ,
+plus, on Linux,
+.B /var/lib/docker
+and
+.BR /swapfile ;
+on FreeBSD,
+.B /compat/linux/proc
+and
+.BR /var/db/freebsd\-update ;
+on Solaris and illumos,
+.BR /devices ,
+.BR /system/contract ,
+.BR /system/object ,
+.B /system/volatile
+and
+.BR /rpool ;
+on macOS,
+.BR /Volumes ,
+.BR /System/Volumes ,
+.BR /private/var/vm ,
+.B /.Spotlight\-V100
+and
+.BR /.fseventsd .
+.PP
+.B /home
+and
+.B /root
+are deliberately not excluded: what appears there after installation is what
+an audit is looking for.
+.PP
+The binary itself and the fingerprint being written are excluded
+automatically.
+.SH MOUNT POINTS
+.TP
+.B local
+Cross into another local filesystem; stop at pseudo filesystems (procfs,
+devfs, tmpfs, autofs and the like) and network ones (NFS, SMB, and on
+Solaris and illumos lofs).
+The type is read with
+.BR statfs (2)
+or
+.BR statvfs (2);
+on AIX it is a number, named from
+.IR /etc/vfs .
+A filesystem whose type cannot be determined is not crossed.
+.TP
+.B same
+Stop at every mount point.
+.TP
+.B all
+Cross everything, network shares included.
+.PP
+The default is
+.BR local ,
+not
+.BR same :
+on a ZFS, btrfs or LVM installation
+.BR /home ,
+.BR /usr ,
+.B /var
+and
+.B /var/log
+are often separate filesystems, and stopping at every mount point would leave
+most of the system out.
+Whatever is not crossed is named in the summary, with its type.
+.SH EXAMPLES
+.RS
+.nf
+# osfp baseline \-o /root/install.osfp \-v
+# osfp baseline \-\-exclude /srv \-\-exclude\-from site\-excludes.txt
+# osfp baseline \-\-root /usr \-o usr.osfp
+.fi
+.RE
+.SH SEE ALSO
+.BR osfp (1),
+.BR osfp\-compare (1)

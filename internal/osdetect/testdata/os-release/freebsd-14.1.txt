@@ -1,0 +1,9 @@
+NAME=FreeBSD
+VERSION="14.1-RELEASE"
+VERSION_ID="14.1"
+ID=freebsd
+ANSI_COLOR="0;31"
+PRETTY_NAME="FreeBSD 14.1-RELEASE"
+CPE_NAME="cpe:/o:freebsd:freebsd:14.1"
+HOME_URL="https://FreeBSD.org/"
+BUG_REPORT_URL="https://bugs.FreeBSD.org/"

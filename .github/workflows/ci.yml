@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  # The main suite, on the two operating systems GitHub runs natively. macOS
+  # exercises a different syscall layer for stat, statfs and file times, which
+  # no amount of cross-compiling would cover.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+      - name: Check formatting
+        run: make fmt-check
+      - name: Vet
+        run: make vet
+      - name: Test
+        run: make test
+      - name: Test under the race detector
+        run: make race
+
+  # Real distributions, end to end. The binary is static and needs no
+  # toolchain in the container, so each image is exercised as it ships: its own
+  # /etc/os-release, its own filesystem, and root, which is what baseline and
+  # compare require. This is the one check that cannot be written as a fixture.
+  distributions:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [debian:12, debian:trixie, ubuntu:24.04, alpine:3.20, rockylinux:9, fedora:40]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+      - name: Build
+        run: make build
+      - name: Identify, fingerprint and compare inside ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD/osfp:/osfp:ro" "${{ matrix.image }}" /bin/sh -e -c '
+            /osfp version
+            /osfp version | grep -E "^system:  linux-"
+            /osfp baseline -o /root/fp.osfp
+            /osfp info -b /root/fp.osfp
+            /osfp verify -b /root/fp.osfp
+            # Nothing can spontaneously delete a file or change its type, so a
+            # self-comparison restricted to those codes must be empty.
+            /osfp compare -b /root/fp.osfp --show "-F,-D,!T" --fail-on-diff
+            # Expected noise is reported, but never decides the exit code.
+            echo noise > /var/log/osfp-ci.log
+            /osfp compare -b /root/fp.osfp --show "+F,-F,-D,!T" --fail-on-diff > /tmp/noise.txt
+            grep -q "+F /var/log/osfp-ci.log" /tmp/noise.txt
+            grep -q "1 of them expected noise" /tmp/noise.txt
+            mkdir -p /opt/planted && echo payload > /opt/planted/file
+            if /osfp compare -b /root/fp.osfp --fail-on-diff > /tmp/drift.txt; then
+              echo "no difference reported after planting a file" >&2; cat /tmp/drift.txt; exit 1
+            fi
+            grep -q "+D /opt/planted" /tmp/drift.txt
+          '
+
+  # The JSON Lines path, on a real filesystem rather than a container image:
+  # the record shapes have to survive jq, and a permission change has to reach
+  # the stream with both sides attached.
+  jsonl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+      - name: Build
+        run: make build
+      - name: Fingerprint, mutate, and read the report with jq
+        run: |
+          set -e
+          # The file whose mode changes is created here, with a known mode: no
+          # file of /etc exists on every image (the Ubuntu runner has no motd).
+          echo mode | sudo tee /etc/osfp-ci-mode.conf >/dev/null
+          sudo chmod 0644 /etc/osfp-ci-mode.conf
+          sudo ./osfp baseline -o /tmp/base.osfp --root /etc
+          sudo chmod 0640 /etc/osfp-ci-mode.conf
+          echo planted | sudo tee /etc/planted.conf >/dev/null
+          sudo ./osfp compare -b /tmp/base.osfp --format json -o /tmp/drift.jsonl
+          # The report is created mode 0600, owned by root, like the fingerprint.
+          sudo chown "$(id -u)" /tmp/drift.jsonl
+          head -1 /tmp/drift.jsonl | jq -e '.record == "header"'
+          tail -1 /tmp/drift.jsonl | jq -e '.record == "summary" and .total > 0'
+          jq -e 'select(.op == "+F" and .path == "/etc/planted.conf") | .new.sha256' /tmp/drift.jsonl
+          jq -e 'select(.op == "%F" and .path == "/etc/osfp-ci-mode.conf") | .old.mode == "0644" and .new.mode == "0640"' /tmp/drift.jsonl
+
+  # The manual pages use the man(7) macros only, which every target's man
+  # reads; mandoc's linter is strict enough to keep them that way.
+  man:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mandoc
+        run: sudo apt-get update && sudo apt-get install -y mandoc
+      - name: Lint the manual pages
+        run: make man-lint
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+      - name: Fuzz the decoders
+        run: make fuzz FUZZTIME=60s
+
+  # The portability guard: Solaris/illumos and AIX support disappears the day a
+  # dependency that does not build there lands in go.mod, and nothing else would
+  # notice. Vetting as well as building catches mistakes in the build-tagged
+  # files for targets no runner can execute.
+  cross:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+      - name: Vet every release target
+        run: make vet-all
+      - name: Build every release target
+        run: make cross

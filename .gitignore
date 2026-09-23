@@ -1,0 +1,7 @@
+# Build artefacts
+/osfp
+/dist/
+
+# Fingerprints produced by a local run
+*.osfp
+*.osfp.tmp

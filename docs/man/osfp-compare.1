@@ -1,0 +1,266 @@
+.TH OSFP\-COMPARE 1 2026-09-23 osfp "User Commands"
+.SH NAME
+osfp\-compare \- report how the filesystem drifted from a fingerprint
+.SH SYNOPSIS
+.B osfp compare
+.B \-b
+.I FILE
+.RB [ \-\-show
+.IR CODES ]
+.RB [ \-\-ignore\-from
+.IR FILE ]
+.RB [ \-\-new\-dir\-mode
+.IR MODE ]
+.RB [ \-\-format
+.IR FORMAT ]
+.RB [ \-o
+.IR FILE ]
+.RB [ \-\-exclude
+.IR PATH ]...\&
+.RB [ \-\-jobs
+.IR N ]
+.RB [ \-\-fail\-on\-diff ]
+.RB [ \-\-no\-color ]
+.RB [ \-\-allow\-os\-mismatch ]
+.RB [ \-\-allow\-non\-root ]
+.RB [ \-v ]
+.SH DESCRIPTION
+.B osfp compare
+verifies a fingerprint written by
+.BR osfp\-baseline (1),
+scans the filesystem again over exactly the perimeter the fingerprint
+recorded \(em the same root, exclusions, mount policy and depth limit \(em and
+reports every difference.
+It must run as root, and refuses a fingerprint whose key is not the key of the
+running system.
+.PP
+The scan and the fingerprint are merged in a single pass, in the same order,
+so a comparison takes about as long as the baseline did, and keeps only the
+fingerprint's list of directories in memory.
+.PP
+A directory the fingerprint does not know is reported once, with counters,
+and its contents are neither listed nor hashed; see
+.BR \-\-new\-dir\-mode .
+.PP
+The modification time is never compared: a
+.BR touch ,
+a restore from backup or an identical reinstall produces no line at all.
+.SH OPTIONS
+.TP
+.BI \-b " FILE"
+The fingerprint to compare against.
+Required.
+.TP
+.BI \-\-show " CODES"
+Report only these change codes, comma separated, for instance
+.BR "\(tiF,!T" .
+The others are still counted, and the summary says how many were hidden.
+.TP
+.BI \-\-ignore\-from " FILE"
+Drop the changes matched by the rules in
+.IR FILE ;
+see
+.BR "IGNORE RULES" .
+.TP
+.BI \-\-new\-dir\-mode " MODE"
+What to report below a directory the fingerprint does not know:
+.B summary
+(the default) reports the directory with the number of files and
+directories below it and their total size, without hashing anything;
+.B deep
+lists and hashes everything below it;
+.B skip
+reports the directory alone.
+.TP
+.BI \-\-format " FORMAT"
+.B text
+(the default) or
+.BR json ;
+see
+.BR "REPORT FORMATS" .
+.TP
+.BI \-o " FILE"
+Write the report to
+.I FILE
+instead of standard output, atomically; the file is left out of the scan.
+Like a fingerprint, it is created with mode 0600: it lists paths and hashes
+of the system.
+.TP
+.BI \-\-exclude " PATH"
+Leave
+.I PATH
+out of this scan, on top of the fingerprint's own exclusions.
+Repeatable.
+Whatever the fingerprint holds under
+.I PATH
+is then reported as deleted, and the report header warns about it.
+.TP
+.BI \-\-jobs " N"
+Hash with
+.I N
+workers.
+The default is the number of CPUs, at most 8.
+.TP
+.B \-\-fail\-on\-diff
+Exit with status 1 when differences are found outside the volatile
+directories; see
+.BR "EXPECTED NOISE" .
+.TP
+.B \-\-no\-color
+Never colour the text report.
+It is coloured only when standard output is a terminal, and never when
+.B NO_COLOR
+is set.
+.TP
+.B \-\-allow\-os\-mismatch
+Compare even though the key of the running system differs from the
+fingerprint's.
+Most of the filesystem will then be reported as changed.
+.TP
+.B \-\-allow\-non\-root
+Scan without root privileges.
+Only a fingerprint that was itself taken unprivileged can be compared this
+way: the other combination would report every unreadable path as deleted.
+.TP
+.BR \-v ", " \-\-verbose
+Report progress on standard error while scanning.
+.SH CHANGE CODES
+.TP
+.B +D
+directory added
+.TP
+.B \-D
+directory deleted
+.TP
+.B \(tiD
+directory whose mode, owner or group changed
+.TP
+.B +F
+path added
+.TP
+.B \-F
+path deleted
+.TP
+.B \(tiF
+file whose content changed, by SHA\-256
+.TP
+.B %F
+file with the same content but a different mode, owner or group
+.TP
+.B !T
+type changed, for instance a file that became a symbolic link
+.TP
+.B \(tiL
+symbolic link with a different target
+.TP
+.B ?E
+path that could not be read
+.SH IGNORE RULES
+An ignore file holds one rule per line; blank lines and lines starting with
+.B #
+are skipped.
+A rule is a pattern, with the syntax of
+.B \-\-exclude
+in
+.BR osfp\-baseline (1),
+optionally preceded by change codes and a colon:
+.PP
+.RS
+.nf
+/var/lib/myapp          every change under this path
+\(tiF,%F:/etc/adjtime       only these codes, for this path
+*.pyc                   every change to a file with this name
+.fi
+.RE
+.PP
+Rules apply after classification: an ignored change is still counted, and the
+summary says how many were hidden.
+Unlike an exclusion, a rule never narrows the scan.
+.SH EXPECTED NOISE
+Changes under the volatile directories are reported under a heading of their
+own, at the end of the text report, rather than among the findings:
+.BR /var/log ,
+.B /var/cache
+and
+.BR /var/spool ;
+on Solaris and illumos also
+.BR /var/adm ,
+.BR /var/svc/log ,
+.B /var/audit
+and, on Solaris 11,
+.BR /var/share/adm ,
+.B /var/share/audit
+and
+.BR /var/share/sstore ;
+on macOS
+.B /private/var/log
+and
+.B /private/var/folders
+instead of the common list.
+.PP
+They are scanned and counted like everything else, and the summary says how
+many of the changes they account for, but they never make
+.B \-\-fail\-on\-diff
+exit with status 1: on a running system, a log grows between any two scans.
+.PP
+The audit trail is among them.
+A deleted audit file is therefore reported, but does not by itself fail
+.BR \-\-fail\-on\-diff .
+.SH REPORT FORMATS
+The text report groups the changes by code, one section per code with its
+count, then the expected noise, then a summary: the count for every code, how
+many changes were expected noise, hidden by
+.B \-\-show
+or by ignore rules, how many entries were scanned, and every mount point that
+was not crossed, with its type.
+It is held until the end, because each section heading carries a count.
+.PP
+With
+.BR "\-\-format json" ,
+the report is JSON Lines: a header object, one object per change, then a
+summary object, each with a
+.B record
+field saying which.
+A change carries its code, its path and, as
+.B old
+and
+.BR new ,
+everything the fingerprint and the scan know about the entry, modification
+time included.
+The summary carries the counts, a
+.B total
+and the part of it that was
+.BR expected .
+The stream is written as the scan goes: on standard output it can be piped to
+.BR jq (1)
+while the scan runs, whereas with
+.B \-o
+the file appears under its name only once complete.
+.SH EXIT STATUS
+.B 0
+when nothing but expected noise was found, or without
+.BR \-\-fail\-on\-diff ;
+.B 1
+when
+.B \-\-fail\-on\-diff
+found other differences;
+.B 2
+on error, including a fingerprint that fails verification or whose key does
+not match;
+.B 3
+on a privilege mismatch;
+.B 130
+when interrupted.
+.SH EXAMPLES
+.RS
+.nf
+# osfp compare \-b linux\-debian\-12\-amd64.osfp
+# osfp compare \-b linux\-debian\-12\-amd64.osfp \-\-show \(aq\(tiF,!T\(aq \-\-ignore\-from ignore.txt
+# osfp compare \-b linux\-debian\-12\-amd64.osfp \-\-format json \-o drift.jsonl
+# jq \-r \(aqselect(.record == "change" and .op == "\(tiF") | .path\(aq drift.jsonl
+.fi
+.RE
+.SH SEE ALSO
+.BR osfp (1),
+.BR osfp\-baseline (1),
+.BR jq (1)

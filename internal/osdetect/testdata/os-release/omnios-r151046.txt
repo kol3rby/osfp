@@ -1,0 +1,8 @@
+NAME="OmniOS"
+ID=omnios
+ID_LIKE=illumos
+VERSION="r151046"
+VERSION_ID="r151046"
+PRETTY_NAME="OmniOS Community Edition v11 r151046"
+HOME_URL="https://omnios.org/"
+BUG_REPORT_URL="https://github.com/omniosorg/illumos-omnios/issues"

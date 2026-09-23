@@ -1,0 +1,193 @@
+.\" osfp(1) \(em written with the man(7) macros only, which every target's man
+.\" reads, AIX included. Check with: mandoc -Tlint docs/man/*.1
+.TH OSFP 1 2026-09-23 osfp "User Commands"
+.SH NAME
+osfp \- fingerprint an operating system and report how it drifted
+.SH SYNOPSIS
+.B osfp
+.I command
+.RI [ options ]
+.PP
+.B osfp baseline
+.RB [ \-o
+.IR FILE ]
+.RI [ options ]
+.br
+.B osfp compare
+.B \-b
+.I FILE
+.RI [ options ]
+.br
+.B osfp info
+.B \-b
+.I FILE
+.RB [ \-\-json ]
+.br
+.B osfp verify
+.B \-b
+.I FILE
+.RB [ \-\-quiet ]
+.br
+.B osfp version
+.RB [ \-\-short ]
+.br
+.B osfp help
+.RI [ command ]
+.SH DESCRIPTION
+.B osfp
+records a fingerprint of a freshly installed operating system \(em the path,
+type, mode, owner and SHA\-256 of every file \(em and later reports how a live
+system has drifted from it: what was added, deleted, modified in content, or
+modified in mode and ownership.
+.PP
+It is meant for occasional audits, not for monitoring: take a fingerprint at
+installation, compare weeks or months later, read the report.
+It keeps no state between two runs.
+.PP
+.B osfp
+is a single static binary, built without cgo, for Linux, FreeBSD, OpenBSD,
+NetBSD, Solaris, illumos, macOS and AIX.
+.PP
+Options may be written with one dash or two:
+.B \-root
+and
+.B \-\-root
+are the same option.
+.SH COMMANDS
+.TP
+.B baseline
+Scan the filesystem and write a fingerprint.
+See
+.BR osfp\-baseline (1).
+.TP
+.B compare
+Scan the filesystem again and report how it differs from a fingerprint.
+See
+.BR osfp\-compare (1).
+.TP
+.BI "info \-b " FILE
+Print what a fingerprint holds: the tool that wrote it and when, its key, the
+system and host it describes, whether it was taken as root, its scope, its
+entry count and size, its digest, and the exclusions it recorded.
+With
+.BR \-\-json ,
+print the same metadata as a JSON object.
+.TP
+.BI "verify \-b " FILE
+Recompute the SHA\-256 of the whole fingerprint and check it against the
+digest stored in it.
+This detects a truncated transfer or a damaged medium; it is not a signature.
+With
+.BR \-\-quiet ,
+print nothing and report the result through the exit status only.
+.TP
+.B version
+Print the version, the commit, the Go toolchain, the target, and the
+fingerprint key of the running system with the source it was read from.
+With
+.BR \-\-short ,
+print the version number only.
+.TP
+.BI "help " \fR[\fIcommand\fR]
+List the commands, or the options of one of them.
+.PP
+.BR info ,
+.B verify
+and
+.B version
+read no filesystem and need no privileges.
+.B baseline
+and
+.B compare
+require root: a scan run as an ordinary user cannot read large parts of the
+filesystem, and would produce a fingerprint that looks complete but is not.
+.SH FINGERPRINT KEY
+Each fingerprint carries a key naming the system it describes, built as
+.IR os \- distribution \- version \- arch ,
+for instance
+.BR linux\-debian\-12\-amd64 ,
+.BR freebsd\-15.0\-amd64 ,
+.B solaris\-11.4\-amd64
+or
+.BR illumos\-omnios\-r151056\-amd64 .
+AIX adds its technology level:
+.BR aix\-7.3\-tl02\-ppc64 .
+.PP
+The key names the fingerprint file by default, and
+.B compare
+refuses to compare a system with a fingerprint whose key differs: an
+upgraded system would report most of its files as changed.
+.B "osfp version"
+prints the key of the running system.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+When set, to any value, the text report is never coloured.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+For
+.BR compare ,
+no difference found, or differences found without
+.BR \-\-fail\-on\-diff ,
+or only expected noise found.
+.TP
+.B 1
+.B compare \-\-fail\-on\-diff
+found differences outside the volatile directories.
+.TP
+.B 2
+Runtime error or invalid invocation; a fingerprint that fails
+.BR verify .
+.TP
+.B 3
+Insufficient privileges, or a comparison between a fingerprint taken as root
+and a scan that is not, or the reverse.
+.TP
+.B 130
+Interrupted by SIGINT or SIGTERM.
+No partial fingerprint is left behind.
+.SH EXAMPLES
+Record a fingerprint of a freshly installed system; it is written to
+.IB key .osfp
+in the current directory:
+.PP
+.RS
+.nf
+# osfp baseline
+.fi
+.RE
+.PP
+Months later, report the drift, and fail in a script if anything outside the
+logs changed:
+.PP
+.RS
+.nf
+# osfp compare \-b linux\-debian\-12\-amd64.osfp \-\-fail\-on\-diff
+.fi
+.RE
+.PP
+Check a fingerprint after copying it to another machine:
+.PP
+.RS
+.nf
+$ osfp verify \-b linux\-debian\-12\-amd64.osfp
+.fi
+.RE
+.SH CAVEATS
+The modification time is recorded but never compared: a change is a change of
+content, mode, owner, type or link target.
+.PP
+Outside Linux, reading a file updates its access time; on a filesystem mounted
+without
+.BR noatime ,
+a scan changes the access times it reads.
+They are not compared either, so this never shows up in a report.
+.PP
+The
+.B aix/ppc64
+build has never been run on a real AIX system.
+.SH SEE ALSO
+.BR osfp\-baseline (1),
+.BR osfp\-compare (1)

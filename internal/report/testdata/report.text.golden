@@ -1,0 +1,43 @@
+osfp 1.0 — filesystem drift report
+Baseline : linux-debian-12-amd64.osfp   (created 2026-03-01T09:12:44Z, 498,233 entries)
+System   : linux-debian-12-amd64  Debian GNU/Linux 12 (bookworm)   (scanned 2026-09-23T14:31:02Z)
+Scope    : / · 4 exclusions · mounts=local · new-dir-mode=summary
+Warning  : 1 exclusion was added on the command line (/srv/backups); covered paths are reported as deleted
+Ignoring : 1 rule
+
+ADDED DIRECTORIES (1)
+  +D /opt/myapp                              (412 files, 18 directories, 84.2 MiB)
+
+DELETED DIRECTORIES (1)
+  -D /etc/oldapp
+
+MODIFIED DIRECTORIES (1)
+  ~D /var/lib/myapp                          uid 0 → 998, gid 0 → 998
+
+ADDED FILES (1)
+  +F /usr/local/bin/backdoor
+
+DELETED FILES (1)
+  -F /etc/motd.orig
+
+MODIFIED FILES — CONTENT (1)
+  ~F /etc/ssh/sshd_config                    3.1 KiB → 3.4 KiB
+
+MODIFIED FILES — METADATA (2)
+  %F /usr/local/bin/deploy.sh                mode 0644 → 0755
+  %F /var/lib/vm/disk.img                    size 1.0 GiB → 2.0 GiB (not hashed, so content was not verified)
+
+TYPE CHANGES (1)
+  !T /usr/bin/python3                        file → symlink
+
+RETARGETED SYMLINKS (1)
+  ~L /etc/alternatives/editor                /usr/bin/nano → /usr/bin/vim.basic
+
+UNREADABLE (1)
+  ?E /var/lib/private/secret                 permission denied
+
+EXPECTED NOISE — VOLATILE DIRECTORIES (1)
+  ~F /var/log/auth.log                       3.1 KiB → 89.1 KiB
+
+SUMMARY  +D 1  -D 1  ~D 1 │ +F 1  -F 1  ~F 2  %F 2 │ !T 1  ~L 1  ?E 1
+         1 of them expected noise  ·  1,240 differences hidden by ignore rules  ·  3 hidden by --show  ·  501,097 entries scanned  ·  elapsed 2m14s
